@@ -1,0 +1,28 @@
+Screen {
+    align: center top;
+}
+
+Select {
+    width: 60;
+    margin: 2;
+}
+
+ScrollableContainer {
+    layout: vertical
+}
+
+Label.invisible {
+    display: none;
+}
+
+Log {
+    height: 100%
+}
+
+Horizontal {
+    height: auto
+}
+
+Button {
+    margin: 2;
+}

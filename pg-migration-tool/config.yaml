@@ -1,0 +1,34 @@
+dbs:
+  my-service:
+    source:
+      db_connection_host: localhost
+      db_database_name : my_service_database
+      db_username: service_user
+      db_password_encrypted: AQICAHikQNm16H8uYi...
+    target:
+      db_connection_host: localhost
+      db_database_name : postgres
+      db_username: postgres
+      db_password: password
+  another-service:
+    source:
+      db_connection_host: localhost
+      db_database_name : my_service_database
+      db_username: service_user
+      db_password_encrypted: AQICAHikQNm16H8uYi...
+    target:
+      db_connection_host: localhost
+      db_database_name : postgres
+      db_username: postgres
+      db_password: password
+  3rd-service:
+    source:
+      db_connection_host: localhost
+      db_database_name : my_service_database
+      db_username: service_user
+      db_password_encrypted: AQICAHikQNm16H8uYi...
+    target:
+      db_connection_host: localhost
+      db_database_name : postgres
+      db_username: postgres
+      db_password: password
