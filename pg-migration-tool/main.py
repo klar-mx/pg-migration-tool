@@ -1,19 +1,18 @@
-import os
-
-import yaml
 import asyncio
-import concurrent.futures
-import asyncpg
-from asyncpg import PostgresError
-from textual import on
-from textual.app import App, ComposeResult
-from textual.containers import  ScrollableContainer, Horizontal
-from textual.widgets import Header, Label, Markdown, Select, Log, Button, Static
-from textual.events import Print
-import boto3
+import base64
+import os
 import subprocess
 import threading
-import base64
+
+import boto3
+import psycopg2
+import yaml
+from psycopg2 import DatabaseError
+from textual import on
+from textual.app import App, ComposeResult
+from textual.containers import Horizontal
+from textual.events import Print
+from textual.widgets import Button, Header, Label, Log, Markdown, Select
 
 root_dir = os.path.dirname(__file__)  # <-- absolute dir the script is in
 config_rel_path = "config.yaml"
@@ -33,8 +32,8 @@ class SelectApp(App):
         yield Header()
         yield Horizontal(Select(((line, line) for line in LINES), prompt="Select database"), Button.success("Migrate", id="migrate", disabled=True))
         yield Markdown(id="db_config_markdown", markdown="")
-        yield Label("Running source connection test...", id="source_connection_label", classes="invisible")
-        yield Label("Running target connection test...", id="target_connection_label", classes="invisible")
+        yield Label("#source Running connection test...", id="source", classes="invisible")
+        yield Label("#target Running connection test...", id="target", classes="invisible")
         yield Log(auto_scroll=True)
 
     @on(Select.Changed)
@@ -59,7 +58,6 @@ class SelectApp(App):
 
         DB_CONFIG_MARKDOWN = f"""\
 # Database Configuration
-### Source
 | key | source | target |
 | --- | --- | --- |
 | db_connection_host | {db["source"]["db_connection_host"]} | {db["target"]["db_connection_host"]} |
@@ -72,11 +70,8 @@ class SelectApp(App):
 
     async def check_db_connection(self, event: Select.Changed) -> bool:
         db = config["dbs"][event.value]
-        self.query_one("#source_connection_label").set_class(False, 'invisible')
-        self.query_one("#target_connection_label").set_class(False, 'invisible')
-        
-        source_ok = await self.check_connection_for_db(db["source"], "#source_connection_label")
-        target_ok = await self.check_connection_for_db(db["target"], "#target_connection_label")
+        source_ok = await self.check_connection_for_db(db["source"], "#source")
+        target_ok = await self.check_connection_for_db(db["target"], "#target")
 
         return source_ok and target_ok
 
@@ -88,22 +83,26 @@ class SelectApp(App):
 
         if not db_password:
             return False
+        
+        self.query_one(label).set_class(False, 'invisible')
+        self.query_one(label).update(f"{label} Running connection test...")
 
         try:
-            await asyncpg.connect(
+            await asyncio.to_thread(psycopg2.connect,
                 database=db["db_database_name"],
                 user=db["db_username"],
                 password=db_password,
                 host=db["db_connection_host"],
             )
-            self.query_one(label).update(f"{db["db_connection_host"]} connection successful.")
+            self.query_one(label).update(f"{label} {db["db_connection_host"]} connection successful.")
             return True
-        except PostgresError as e:
-            self.query_one(label).update(f"{db["db_connection_host"]} connection failed with password {db_password}: {e}")
+        except DatabaseError as e:
+            self.query_one(label).update(f"{label} {db["db_connection_host"]} connection failed: {e}")
             return False
         
     async def decrypt_password(self, db, label) -> str:
-        self.query_one(label).update(f"Decrypting db password...")
+        self.query_one(label).update(f"{label} Decrypting db password...")
+        self.query_one(label).set_class(False, 'invisible')
 
         try:
             response = await asyncio.to_thread(client.decrypt, CiphertextBlob=base64.b64decode(db["db_password_encrypted"]), KeyId=config["common"]["kms_key_id"])
@@ -113,7 +112,7 @@ class SelectApp(App):
 
             return decrypted_password
         except Exception as e:
-            self.query_one(label).update(f"Failed to decrypt password: {e}")
+            self.query_one(label).update(f'{label} Failed to decrypt password with kms key \'{config["common"]["kms_key_id"]}\': {e}')
             return None
         
     def generate_pg_dump_and_restore_cmd(self, event: Select.Changed)-> str:
