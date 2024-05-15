@@ -1,5 +1,7 @@
 common:
   kms_key_id: alias/my-key
+  dumps_working_directory: /tmp
+
 dbs:
   my-service:
     source:
