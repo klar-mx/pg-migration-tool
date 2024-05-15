@@ -15,6 +15,8 @@ import subprocess
 import threading
 import base64
 
+KMS_KEY = os.environ["KMS_KEY"]
+
 root_dir = os.path.dirname(__file__)  # <-- absolute dir the script is in
 config_rel_path = "config.yaml"
 abs_config_file_path = os.path.join(root_dir, config_rel_path)
@@ -106,7 +108,7 @@ class SelectApp(App):
         self.query_one(label).update(f"Decrypting db password...")
 
         try:
-            response = await asyncio.to_thread(client.decrypt, CiphertextBlob=base64.b64decode(db["db_password_encrypted"]), KeyId='alias/my-key')
+            response = await asyncio.to_thread(client.decrypt, CiphertextBlob=base64.b64decode(db["db_password_encrypted"]), KeyId=f'alias/{KMS_KEY}')
             decrypted_password = response['Plaintext'].decode('utf-8')
 
             db["db_password"] = decrypted_password
