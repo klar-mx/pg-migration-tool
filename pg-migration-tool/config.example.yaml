@@ -1,3 +1,5 @@
+common:
+  kms_key_id: alias/my-key
 dbs:
   my-service:
     source:
