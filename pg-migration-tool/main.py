@@ -5,9 +5,9 @@ import subprocess
 import threading
 
 import boto3
-import psycopg2
+import asyncpg
 import yaml
-from psycopg2 import DatabaseError
+from asyncpg.exceptions._base import PostgresError
 from textual import on
 from textual.app import App, ComposeResult
 from textual.containers import Horizontal
@@ -88,7 +88,8 @@ class SelectApp(App):
         self.query_one(label).update(f"{label} Running connection test...")
 
         try:
-            await asyncio.to_thread(psycopg2.connect,
+            await asyncpg.connect(
+                timeout=5,
                 database=db["db_database_name"],
                 user=db["db_username"],
                 password=db_password,
@@ -96,8 +97,11 @@ class SelectApp(App):
             )
             self.query_one(label).update(f"{label} {db["db_connection_host"]} connection successful.")
             return True
-        except DatabaseError as e:
+        except PostgresError as e:
             self.query_one(label).update(f"{label} {db["db_connection_host"]} connection failed: {e}")
+            return False
+        except TimeoutError as e:
+            self.query_one(label).update(f"{label} {db["db_connection_host"]} connection timed out.")
             return False
         
     async def decrypt_password(self, db, label) -> str:
