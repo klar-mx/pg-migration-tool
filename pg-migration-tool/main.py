@@ -106,7 +106,7 @@ class SelectApp(App):
         self.query_one(label).update(f"Decrypting db password...")
 
         try:
-            response = await asyncio.to_thread(client.decrypt, CiphertextBlob=base64.b64decode(db["db_password_encrypted"]), KeyId='alias/my-key')
+            response = await asyncio.to_thread(client.decrypt, CiphertextBlob=base64.b64decode(db["db_password_encrypted"]), KeyId=config["common"]["kms_key_id"])
             decrypted_password = response['Plaintext'].decode('utf-8')
 
             db["db_password"] = decrypted_password
