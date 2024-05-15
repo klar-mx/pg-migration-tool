@@ -82,9 +82,6 @@ class SelectApp(App):
         
         db["db_password"] = db_password
 
-        if not db_password:
-            return False
-        
         self.query_one(label).set_class(False, 'invisible')
         self.query_one(label).update(f"{label} Running connection test...")
 
