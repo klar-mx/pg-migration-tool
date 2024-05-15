@@ -98,8 +98,8 @@ class SelectApp(App):
             )
             self.query_one(label).update(f"{db["db_connection_host"]} connection successful.")
             return True
-        except PostgresError as e:
-            self.query_one(label).update(f"{db["db_connection_host"]} connection failed with password {db_password}: {e}")
+        except Exception as e:
+            self.query_one(label).update(f"{db["db_connection_host"]} connection failed: {e}")
             return False
         
     async def decrypt_password(self, db, label) -> str:
