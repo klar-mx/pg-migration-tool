@@ -9,6 +9,7 @@ pyyaml = "*"
 isort = "*"
 psycopg2 = "*"
 boto3 = "*"
+asyncpg = "*"
 
 [dev-packages]
 
