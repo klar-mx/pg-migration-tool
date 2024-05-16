@@ -8,7 +8,7 @@ ENV COLORTERM=truecolor
 
 RUN apt-get update && apt-get -y upgrade
 
-RUN apt-get install -y libpq-dev gcc xterm
+RUN apt-get install -y libpq-dev gcc xterm postgresql-client
 
 RUN pip install pipenv
 

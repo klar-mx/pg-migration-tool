@@ -122,11 +122,11 @@ class SelectApp(App):
     def generate_pg_dump_and_restore_cmd(self, event: Select.Changed)-> str:
         db = config["dbs"][event.value]
         pg_dump_cmd = f'PGPASSWORD="{db['source']['db_password']}" pg_dump -h {db['source']['db_connection_host']} -U {db['source']['db_username']} -d {db['source']['db_database_name']} --create --clean --encoding utf8 --format directory --jobs 16 -Z 0 -v --file={db['source']['db_database_name']}'
-        pg_restore_cmd = f'PGPASSWORD="{db['target']['db_password']}" pg_restore -h {db['target']['db_connection_host']} -U {db['target']['db_username']} -d {db['target']['db_database_name']} --clean  -vv {db['source']['db_database_name']}'
+        drop_db_cmd = f'PGPASSWORD="{db['target']['db_password']}" psql -h {db['target']['db_connection_host']} -U {db['target']['db_username']} -c "DROP DATABASE IF EXISTS {db['target']['db_database_name']};"'
+        pg_restore_cmd = f'PGPASSWORD="{db['target']['db_password']}" pg_restore -h {db['target']['db_connection_host']} -U {db['target']['db_username']} -d "{db['target']['db_database_name']}" -vv {root_dir}/{db['source']['db_database_name']}'
 
-        cmd = " && /\n ".join([pg_dump_cmd, pg_restore_cmd])
+        cmd = " && /\n ".join([pg_dump_cmd, drop_db_cmd, pg_restore_cmd])
         self.query_one(Log).write_line("The following migration commands will be executed:\n" + cmd)
-
         print(cmd)
         return cmd
     
