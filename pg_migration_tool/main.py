@@ -31,7 +31,9 @@ class SelectApp(App):
 
     def compose(self) -> ComposeResult:
         yield Header()
-        yield Horizontal(Select(((line, line) for line in LINES), prompt="Select database"), Button.success("Migrate", id="migrate", disabled=True))
+        yield Horizontal(Select(((line, line) for line in LINES), prompt="Select database"), 
+                         Button.success("Migrate", id="migrate", disabled=True),
+                         Button.success("Validate", id="validate", disabled=True))
         yield Markdown(id="db_config_markdown", markdown="")
         yield Label("#source Running connection test...", id="source", classes="invisible")
         yield Label("#target Running connection test...", id="target", classes="invisible")
@@ -48,7 +50,8 @@ class SelectApp(App):
         self.display_db_config(config["dbs"][event.value])
 
         if connections_ok:
-            self.query_one(Button).disabled = False
+            self.query_one("#migrate").disabled = False
+            self.query_one("#validate").disabled = False
             self.CMD = self.generate_pg_dump_and_restore_cmd(event)
 
     def clean_old_dumps(self, db):
@@ -139,12 +142,15 @@ class SelectApp(App):
         return cmd
     
     @on(Button.Pressed)
-    def migrate(self, event: Button.Pressed):
+    def button_pressed(self, event: Button.Pressed):
         if event.button.id == "migrate":
             event.button.disabled = True
             self.query_one(Select).disabled = True
             self.begin_capture_print(self, True, True)
             self.run_cmd(self.CMD)
+        elif event.button.id == "validate":
+            event.button.disabled = True
+            asyncio.create_task(self.validate_migration())
 
     def run_cmd(self, cmd):
         process = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -163,6 +169,44 @@ class SelectApp(App):
         thread_err = threading.Thread(target=stream_error, args=(process,))
         thread_out.start()
         thread_err.start()
+
+    async def validate_migration(self):
+            self.query_one(Log).write_line("Starting validation...")
+
+            db = config["dbs"][self.title]
+
+            source_conn = await asyncpg.connect(
+                database=db["source"]["db_database_name"],
+                user=db["source"]["db_username"],
+                password=db["source"]["db_password"],
+                host=db["source"]["db_connection_host"]
+            )
+
+            target_conn = await asyncpg.connect(
+                database=db["target"]["db_database_name"],
+                user=db["target"]["db_username"],
+                password=db["target"]["db_password"],
+                host=db["target"]["db_connection_host"]
+            )
+
+            source_tables = await source_conn.fetch("SELECT tablename FROM pg_tables WHERE schemaname='public';")
+            target_tables = await target_conn.fetch("SELECT tablename FROM pg_tables WHERE schemaname='public';")
+
+            validation_results = "| Table | Source Rows | Target Rows | Match |\n"
+            validation_results += "| --- | --- | --- | --- |\n"
+
+            for table in source_tables:
+                table_name = table["tablename"]
+                source_count = await source_conn.fetchval(f"SELECT COUNT(*) FROM {table_name};")
+                target_count = await target_conn.fetchval(f"SELECT COUNT(*) FROM {table_name};")
+
+                match = "Yes" if source_count == target_count else "No"
+                validation_results += f"| {table_name} | {source_count} | {target_count} | {match} |\n"
+
+            self.query_one(Markdown).update(validation_results)
+
+            await source_conn.close()
+            await target_conn.close()
 
 
     @on(Print)
