@@ -15,8 +15,8 @@ from textual.events import Print
 from textual.widgets import Button, Header, Label, Log, Markdown, Select
 
 root_dir = os.path.dirname(__file__)  # <-- absolute dir the script is in
-config_rel_path = os.getenv("PG_MIGRATION_TOOL_CONFIG", "config.yaml")
-abs_config_file_path = os.path.join(root_dir, config_rel_path)
+config_rel_path = "config.yaml"
+abs_config_file_path = os.getenv("PG_MIGRATION_TOOL_CONFIG", os.path.join(root_dir, config_rel_path))
 client = boto3.client('kms', region_name='us-east-2')
 
 with open(abs_config_file_path, "r") as file:
