@@ -127,11 +127,12 @@ class SelectApp(App):
     def generate_pg_dump_and_restore_cmd(self, event: Select.Changed)-> str:
         db = config["dbs"][event.value]
         dump_path = self.construct_path_to_dump(db)
-        pg_dump_cmd = f'PGPASSWORD="{db['source']['db_password']}" pg_dump -h {db['source']['db_connection_host']} -U {db['source']['db_username']} -d {db['source']['db_database_name']} --create --clean --encoding utf8 --format directory --jobs 16 -Z 0 -v --file={dump_path}'
-        pg_restore_cmd = f'PGPASSWORD="{db['target']['db_password']}" pg_restore -h {db['target']['db_connection_host']} -U {db['target']['db_username']} -d {db['target']['db_database_name']} --clean --if-exists --single-transaction --exit-on-error --format directory -vv {dump_path}'
-        all_good_cmd = 'echo "THE MIGRATION HAS FINISHED WOHOOOOOO!!! pg_restore exit code: $?"'
+        pg_dump_cmd = f'PGPASSWORD=\'{db['source']['db_password']}\' pg_dump -h {db['source']['db_connection_host']} -U {db['source']['db_username']} -d {db['source']['db_database_name']} --create --clean --encoding utf8 --format directory --jobs 16 -Z 0 -v --file={dump_path}'
+        pg_restore_cmd = f'PGPASSWORD=\'{db['target']['db_password']}\' pg_restore -h {db['target']['db_connection_host']} -U {db['target']['db_username']} -d {db['target']['db_database_name']} --clean --if-exists --single-transaction --exit-on-error --format directory -vv {dump_path}'
+        finished_cmd = 'echo "THE MIGRATION HAS FINISHED!!! pg_restore exit code: $?"'
 
-        cmd = " && /\n ".join([pg_dump_cmd, pg_restore_cmd, all_good_cmd])
+        cmd = " && /\n ".join([pg_dump_cmd, pg_restore_cmd])
+        cmd += " ; " + finished_cmd
         self.query_one(Log).write_line("The following migration commands will be executed:\n" + cmd)
 
         print(cmd)
