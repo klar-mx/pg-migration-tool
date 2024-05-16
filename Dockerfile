@@ -1,35 +1,40 @@
-FROM python:3.12.3-slim-bookworm
-
-ARG CONFIG_PATH=pg-migration-tool/config.example.yaml
-
-ENV TERM=xterm-256color
-
-ENV COLORTERM=truecolor
+FROM python:3.12-slim
 
 RUN apt-get update && apt-get -y upgrade
+RUN apt-get install -y libpq-dev gcc xterm wget postgresql-client postgresql-client-common
 
-RUN apt-get install -y libpq-dev gcc xterm postgresql-client postgresql-client-common
-
-RUN pip install pipenv
-
-RUN useradd -m pgmigrator
+# Don't run as root
+RUN useradd -m pgmigrator && \
+    # Set the working directory in the container
+    mkdir -p /home/pgmigrator/pg-migration-tool && \
+    chown pgmigrator:pgmigrator /home/pgmigrator/pg-migration-tool && \
+    # Use wget instead of curl since curl is external package in alpine
+    # https://python-poetry.org/docs/#installation
+    wget -O get-poetry.py https://install.python-poetry.org && \
+    POETRY_HOME=/home/pgmigrator/.poetry python3 get-poetry.py && \
+    rm get-poetry.py
 
 USER pgmigrator
 
-WORKDIR /app
+# Add Poetry to PATH
+ENV PATH="/home/pgmigrator/.poetry/bin:${PATH}"
 
-COPY Pipfile ./
+# Install dependencies
+COPY poetry.lock pyproject.toml README.md ./
+RUN poetry install
 
-COPY Pipfile.lock ./
+WORKDIR /home/pgmigrator
 
-COPY pg-migration-tool/main.py ./pg-migration-tool/
+COPY pg_migration_tool/__init__.py ./pg-migration-tool/
+COPY pg_migration_tool/main.py ./pg-migration-tool/
+COPY pg_migration_tool/select.tcss ./pg-migration-tool/
 
-COPY pg-migration-tool/select.tcss ./pg-migration-tool/
-
+ARG CONFIG_PATH=pg_migration_tool/config.example.yaml
 COPY $CONFIG_PATH ./pg-migration-tool/config.yaml
 
-RUN pipenv install
+ENV TERM=xterm-256color
+ENV COLORTERM=truecolor
 
-ENTRYPOINT ["pipenv", "run", "python"]
+ENTRYPOINT ["poetry", "run", "python"]
 
 CMD ["pg-migration-tool/main.py"]
