@@ -96,6 +96,7 @@ class SelectApp(App):
                 user=db["db_username"],
                 password=db_password,
                 host=db["db_connection_host"],
+                port=db.get("port", 5432),
             )
             self.query_one(label).update(f"{label} {db["db_connection_host"]} connection successful.")
             return True
@@ -130,8 +131,8 @@ class SelectApp(App):
     def generate_pg_dump_and_restore_cmd(self, event: Select.Changed)-> str:
         db = config["dbs"][event.value]
         dump_path = self.construct_path_to_dump(db)
-        pg_dump_cmd = f'PGPASSWORD=\'{db['source']['db_password']}\' pg_dump -h {db['source']['db_connection_host']} -U {db['source']['db_username']} -d {db['source']['db_database_name']} --create --clean --encoding utf8 --format directory --jobs 16 -Z 0 -v --file={dump_path}'
-        pg_restore_cmd = f'PGPASSWORD=\'{db['target']['db_password']}\' pg_restore -h {db['target']['db_connection_host']} -U {db['target']['db_username']} -d {db['target']['db_database_name']} --clean --if-exists --single-transaction --exit-on-error --format directory -vv {dump_path}'
+        pg_dump_cmd = f'PGPASSWORD=\'{db['source']['db_password']}\' pg_dump -h {db['source']['db_connection_host']} -p {db.get('port', 5432)} -U {db['source']['db_username']} -d {db['source']['db_database_name']} --create --clean --encoding utf8 --format directory --jobs 16 -Z 0 -v --file={dump_path}'
+        pg_restore_cmd = f'PGPASSWORD=\'{db['target']['db_password']}\' pg_restore -h {db['target']['db_connection_host']} -p {db.get('port', 5432)} -U {db['target']['db_username']} -d {db['target']['db_database_name']} --clean --if-exists --single-transaction --exit-on-error --format directory -vv {dump_path}'
         finished_cmd = 'echo "THE MIGRATION HAS FINISHED!!! pg_restore exit code: $?"'
 
         cmd = " && /\n ".join([pg_dump_cmd, pg_restore_cmd])
@@ -179,14 +180,16 @@ class SelectApp(App):
                 database=db["source"]["db_database_name"],
                 user=db["source"]["db_username"],
                 password=db["source"]["db_password"],
-                host=db["source"]["db_connection_host"]
+                host=db["source"]["db_connection_host"],
+                port=db.get('port', 5432),
             )
 
             target_conn = await asyncpg.connect(
                 database=db["target"]["db_database_name"],
                 user=db["target"]["db_username"],
                 password=db["target"]["db_password"],
-                host=db["target"]["db_connection_host"]
+                host=db["target"]["db_connection_host"],
+                port=db.get('port', 5432),
             )
 
             source_tables = await source_conn.fetch("SELECT tablename FROM pg_tables WHERE schemaname='public';")
