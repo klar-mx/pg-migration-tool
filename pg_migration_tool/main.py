@@ -22,6 +22,7 @@ client = boto3.client('kms', region_name='us-east-2')
 with open(abs_config_file_path, "r") as file:
     config = yaml.safe_load(file)
     LINES = list(config["dbs"].keys())
+    LINES.sort()
 
 
 class SelectApp(App):
