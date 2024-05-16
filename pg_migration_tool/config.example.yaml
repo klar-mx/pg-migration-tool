@@ -3,17 +3,15 @@ common:
   dumps_working_directory: /tmp
 
 dbs:
-  my-service:
+  dvdrental:
     source:
       db_connection_host: localhost
-      db_database_name : my_service_database
-      db_username: service_user
-      db_password_encrypted: AQICAHikQNm16H8uYi...
+      db_database_name : dvdrental
+      db_username: postgres
     target:
       db_connection_host: localhost
-      db_database_name : postgres
+      db_database_name : dvdrental_copy
       db_username: postgres
-      db_password: password
   another-service:
     source:
       db_connection_host: localhost
