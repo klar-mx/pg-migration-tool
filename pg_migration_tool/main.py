@@ -52,7 +52,7 @@ class SelectApp(App):
 
     def clean_old_dumps(self, db):
         self.query_one(Log).clear()
-        dump_path = construct_path_to_dump(db)
+        dump_path = self.construct_path_to_dump(db)
         os.system(f"rm -rf {dump_path}")
 
     def display_db_config(self, db):
@@ -125,7 +125,7 @@ class SelectApp(App):
         
     def generate_pg_dump_and_restore_cmd(self, event: Select.Changed)-> str:
         db = config["dbs"][event.value]
-        dump_path = construct_path_to_dump(db)
+        dump_path = self.construct_path_to_dump(db)
         pg_dump_cmd = f'PGPASSWORD="{db['source']['db_password']}" pg_dump -h {db['source']['db_connection_host']} -U {db['source']['db_username']} -d {db['source']['db_database_name']} --create --clean --encoding utf8 --format directory --jobs 16 -Z 0 -v --file={dump_path}'
         pg_restore_cmd = f'PGPASSWORD="{db['target']['db_password']}" pg_restore -h {db['target']['db_connection_host']} -U {db['target']['db_username']} -d {db['target']['db_database_name']} --clean -vv {dump_path}'
 
