@@ -1,0 +1,23 @@
+[tool.poetry]
+name = "pg-migration-tool"
+version = "0.1.0"
+description = ""
+authors = ["Andriy Mykhaylyk <andriy.mykhaylyk@klar.mx>"]
+license = "AGPL-3.0"
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.11"
+textual = "*"
+pyyaml = "*"
+isort = "*"
+psycopg2 = "*"
+boto3 = "*"
+asyncpg = "*"
+
+
+[tool.poetry.group.dev.dependencies]
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
