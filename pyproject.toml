@@ -2,7 +2,7 @@
 name = "pg-migration-tool"
 version = "0.1.0"
 description = ""
-authors = ["Andriy Mykhaylyk <andriy.mykhaylyk@klar.mx>"]
+authors = ["Paweł Rosiński <pawel.rosinski@klar.mx>", "Mattia Procopio <mattia.procopio@klar.mx>", "Tomas Bertelli <tomas.bertelli@klar.mx>", "Andriy Mykhaylyk <andriy.mykhaylyk@klar.mx>"]
 license = "AGPL-3.0"
 readme = "README.md"
 
