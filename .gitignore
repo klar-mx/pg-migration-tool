@@ -1,3 +1,4 @@
+pg-migration-config/
 config.yaml
 *.log
 .DS_Store
