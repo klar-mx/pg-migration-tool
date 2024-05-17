@@ -13,6 +13,7 @@ from textual.app import App, ComposeResult
 from textual.containers import Horizontal
 from textual.events import Print
 from textual.widgets import Button, Header, Label, Log, Markdown, Select
+from textual.widgets import Checkbox
 
 root_dir = os.path.dirname(__file__)  # <-- absolute dir the script is in
 config_rel_path = "config.yaml"
@@ -31,10 +32,17 @@ class SelectApp(App):
 
     def compose(self) -> ComposeResult:
         yield Header()
-        yield Horizontal(Select(((line, line) for line in LINES), prompt="Select database"), 
-                         Button.success("Migrate", id="migrate", disabled=True),
-                         Button.success("Validate", id="validate", disabled=True))
+        yield Horizontal(
+            Select(((line, line) for line in LINES), prompt="Select database"),
+            Button(label="Migrate", id="migrate", disabled=True),
+            Button(label="Validate", id="validate", disabled=True),
+            Button(label="Clone and Modify Repo", id="clone_modify_repo", disabled=True)
+        )
         yield Markdown(id="db_config_markdown", markdown="")
+        yield Horizontal(
+            Checkbox(label="Clean target database before restore", id="clean_target_db"),
+            Checkbox(label="Discard object owner in export/import", id="discard_owner")
+        )
         yield Label("#source Running connection test...", id="source", classes="invisible")
         yield Label("#target Running connection test...", id="target", classes="invisible")
         yield Log(auto_scroll=True)
@@ -132,17 +140,30 @@ class SelectApp(App):
     def generate_pg_dump_and_restore_cmd(self, event: Select.Changed)-> str:
         db = config["dbs"][event.value]
         dump_path = self.construct_path_to_dump(db)
-        pg_dump_cmd = f'PGPASSWORD=\'{db['source']['db_password']}\' pg_dump -T \'*awsdms*\' -h {db['source']['db_connection_host']} -p {db['source'].get('port', 5432)} -U {db['source']['db_username']} -d {db['source']['db_database_name']} --create --clean --encoding utf8 --format directory --jobs 16 -Z 0 -v --file={dump_path}'
-        pg_restore_cmd = f'PGPASSWORD=\'{db['target']['db_password']}\' pg_restore -h {db['target']['db_connection_host']} -p {db['target'].get('port', 5432)} -U {db['target']['db_username']} -d {db['target']['db_database_name']} --clean --if-exists --single-transaction --exit-on-error --format directory -vv {dump_path}'
-        finished_cmd = 'echo "THE MIGRATION HAS FINISHED!!! pg_restore exit code: $?"'
+        
+        clean_target = self.query_one("#clean_target_db").value
+        discard_owner = self.query_one("#discard_owner").value
 
-        cmd = " && /\n ".join([pg_dump_cmd, pg_restore_cmd])
-        cmd += " ; " + finished_cmd
+        pg_dump_cmd = f'PGPASSWORD="{db["source"]["db_password"]}" pg_dump -h {db["source"]["db_connection_host"]} -p {db["source"].get("port", 5432)} -U {db["source"]["db_username"]} -d {db["source"]["db_database_name"]} --create --clean --encoding utf8 --format directory --jobs 16 -Z 0 -v --file={dump_path}'
+        
+        if discard_owner:
+            pg_dump_cmd += " --no-owner"
+
+        pg_restore_cmd = f'PGPASSWORD="{db["target"]["db_password"]}" pg_restore -h {db["target"]["db_connection_host"]} -p {db["target"].get("port", 5432)} -U {db["target"]["db_username"]} -d {db["target"]["db_database_name"]} --clean --if-exists --single-transaction --exit-on-error --format directory -vv {dump_path}'
+
+        if discard_owner:
+            pg_restore_cmd += " --no-owner"
+        if clean_target:
+            pg_restore_cmd = f'PGPASSWORD="{db["target"]["db_password"]}" dropdb -h {db["target"]["db_connection_host"]} -p {db["target"].get("port", 5432)} -U {db["target"]["db_username"]} {db["target"]["db_database_name"]} && ' + pg_restore_cmd
+
+        all_good_cmd = 'echo "THE MIGRATION HAS FINISHED WOHOOOOOO!!! pg_restore exit code: $?"'
+
+        cmd = " && /\n ".join([pg_dump_cmd, pg_restore_cmd, all_good_cmd])
         self.query_one(Log).write_line("The following migration commands will be executed:\n" + cmd)
 
         print(cmd)
         return cmd
-    
+
     @on(Button.Pressed)
     def button_pressed(self, event: Button.Pressed):
         if event.button.id == "migrate":
@@ -153,6 +174,9 @@ class SelectApp(App):
         elif event.button.id == "validate":
             event.button.disabled = True
             asyncio.create_task(self.validate_migration())
+        elif event.button.id == "clone_modify_repo":
+            event.button.disabled = True
+            asyncio.create_task(self.clone_and_modify_repo())
 
     def run_cmd(self, cmd):
         process = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
