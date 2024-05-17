@@ -69,6 +69,7 @@ class SelectApp(App):
 | db_database_name   | {db["source"]["db_database_name"]}   | {db["target"]["db_database_name"]}   |
 | db_username | {db["source"]["db_username"]}               | {db["target"]["db_username"]}        |
 | db_password | {db["source"]["db_password"] if "db_password" in db["source"].keys() else None }   | {db["target"]["db_password"] if "db_password" in db["target"].keys() else None} |
+| port | {db["source"].get("port", 5432)} | {db["target"].get("port", 5432)} |
 """
 
         self.query_one(Markdown).update(DB_CONFIG_MARKDOWN)
