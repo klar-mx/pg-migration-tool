@@ -35,8 +35,7 @@ class SelectApp(App):
         yield Horizontal(
             Select(((line, line) for line in LINES), prompt="Select database"),
             Button(label="Migrate", id="migrate", disabled=True),
-            Button(label="Validate", id="validate", disabled=True),
-            Button(label="Clone and Modify Repo", id="clone_modify_repo", disabled=True)
+            Button(label="Validate", id="validate", disabled=True)
         )
         yield Markdown(id="db_config_markdown", markdown="")
         yield Horizontal(
@@ -174,9 +173,6 @@ class SelectApp(App):
         elif event.button.id == "validate":
             event.button.disabled = True
             asyncio.create_task(self.validate_migration())
-        elif event.button.id == "clone_modify_repo":
-            event.button.disabled = True
-            asyncio.create_task(self.clone_and_modify_repo())
 
     def run_cmd(self, cmd):
         process = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
