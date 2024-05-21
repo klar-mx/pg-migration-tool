@@ -12,7 +12,7 @@ from textual import on
 from textual.app import App, ComposeResult
 from textual.containers import Horizontal
 from textual.events import Print
-from textual.widgets import Button, Header, Label, Log, Markdown, Select
+from textual.widgets import Button, Header, Log, Markdown, Select, Label, Input
 
 root_dir = os.path.dirname(__file__)  # <-- absolute dir the script is in
 config_rel_path = "config.yaml"
@@ -33,10 +33,10 @@ class SelectApp(App):
         yield Header()
         yield Horizontal(Select(((line, line) for line in LINES), prompt="Select database"), 
                          Button.success("Migrate", id="migrate", disabled=True),
-                         Button.success("Validate", id="validate", disabled=True))
+                         Button.success("Validate", id="validate", disabled=True),
+                         Label("--jobs"),
+                         Input(placeholder="16"))
         yield Markdown(id="db_config_markdown", markdown="")
-        yield Label("#source Running connection test...", id="source", classes="invisible")
-        yield Label("#target Running connection test...", id="target", classes="invisible")
         yield Log(auto_scroll=True)
 
     @on(Select.Changed)
@@ -76,19 +76,17 @@ class SelectApp(App):
 
     async def check_db_connection(self, event: Select.Changed) -> bool:
         db = config["dbs"][event.value]
-        source_ok = await self.check_connection_for_db(db["source"], "#source")
-        target_ok = await self.check_connection_for_db(db["target"], "#target")
+        source_ok = await self.check_connection_for_db(db["source"], "[source]")
+        target_ok = await self.check_connection_for_db(db["target"], "[target]")
 
         return source_ok and target_ok
 
     async def check_connection_for_db(self, db, label) -> bool:
+        self.query_one(Log).write_line(f"{label} Running DB connection test...")
         db_password = db["db_password"] if "db_password" in db.keys() and db["db_password"] else \
             await self.decrypt_password(db, label) if "db_password_encrypted" in db.keys() else None
         
         db["db_password"] = db_password
-
-        self.query_one(label).set_class(False, 'invisible')
-        self.query_one(label).update(f"{label} Running connection test...")
 
         try:
             await asyncpg.connect(
@@ -99,18 +97,17 @@ class SelectApp(App):
                 host=db["db_connection_host"],
                 port=db.get("port", 5432),
             )
-            self.query_one(label).update(f"{label} {db["db_connection_host"]} connection successful.")
+            self.query_one(Log).write_line(f"{label} {db["db_connection_host"]} connection successful.")
             return True
         except PostgresError as e:
-            self.query_one(label).update(f"{label} {db["db_connection_host"]} connection failed: {e}")
+            self.query_one(Log).write_line(f"{label} {db["db_connection_host"]} connection failed: {e}")
             return False
         except TimeoutError as e:
-            self.query_one(label).update(f"{label} {db["db_connection_host"]} connection timed out.")
+            self.query_one(Log).write_line(f"{label} {db["db_connection_host"]} connection timed out.")
             return False
         
     async def decrypt_password(self, db, label) -> str:
-        self.query_one(label).update(f"{label} Decrypting db password...")
-        self.query_one(label).set_class(False, 'invisible')
+        self.query_one(Log).write_line(f"{label} Decrypting db password...")
 
         try:
             response = await asyncio.to_thread(client.decrypt, CiphertextBlob=base64.b64decode(db["db_password_encrypted"]), KeyId=config["common"]["kms_key_id"])
@@ -120,7 +117,7 @@ class SelectApp(App):
 
             return decrypted_password
         except Exception as e:
-            self.query_one(label).update(f'{label} Failed to decrypt password with kms key \'{config["common"]["kms_key_id"]}\': {e}')
+            self.query_one(Log).write_line(f'{label} Failed to decrypt password with kms key \'{config["common"]["kms_key_id"]}\': {e}')
             return None
 
     def construct_path_to_dump(self, db) -> str:
@@ -130,9 +127,10 @@ class SelectApp(App):
 
         
     def generate_pg_dump_and_restore_cmd(self, event: Select.Changed)-> str:
+        jobs = self.query_one(Input).value or 16
         db = config["dbs"][event.value]
         dump_path = self.construct_path_to_dump(db)
-        pg_dump_cmd = f'PGPASSWORD=\'{db['source']['db_password']}\' pg_dump -T \'*awsdms*\' -h {db['source']['db_connection_host']} -p {db['source'].get('port', 5432)} -U {db['source']['db_username']} -d {db['source']['db_database_name']} --create --clean --encoding utf8 --format directory --jobs 16 -Z 0 -v --file={dump_path}'
+        pg_dump_cmd = f'PGPASSWORD=\'{db['source']['db_password']}\' pg_dump -T \'*awsdms*\' -h {db['source']['db_connection_host']} -p {db['source'].get('port', 5432)} -U {db['source']['db_username']} -d {db['source']['db_database_name']} --create --clean --encoding utf8 --format directory --jobs {jobs} -Z 0 -v --file={dump_path}'
         pg_restore_cmd = f'PGPASSWORD=\'{db['target']['db_password']}\' pg_restore -h {db['target']['db_connection_host']} -p {db['target'].get('port', 5432)} -U {db['target']['db_username']} -d {db['target']['db_database_name']} --clean --if-exists --single-transaction --exit-on-error --format directory -vv {dump_path}'
         finished_cmd = 'echo "THE MIGRATION HAS FINISHED!!! pg_restore exit code: $?"'
 
@@ -193,8 +191,8 @@ class SelectApp(App):
                 port=db.get('port', 5432),
             )
 
-            source_tables = await source_conn.fetch("SELECT tablename FROM pg_tables WHERE schemaname='public';")
-            target_tables = await target_conn.fetch("SELECT tablename FROM pg_tables WHERE schemaname='public';")
+            source_tables = await source_conn.fetch("SELECT tablename FROM pg_tables WHERE schemaname='public' AND schemaname NOT LIKE 'awsdms_%';")
+            target_tables = await target_conn.fetch("SELECT tablename FROM pg_tables WHERE schemaname='public' AND schemaname NOT LIKE 'awsdms_%';")
 
             validation_results = "| Table | Source Rows | Target Rows | Match |\n"
             validation_results += "| --- | --- | --- | --- |\n"
