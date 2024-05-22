@@ -214,7 +214,7 @@ class SelectApp(App):
     @on(Button.Pressed)
     def button_pressed(self, event: Button.Pressed):
         if event.button.id == "migrate":
-            # self.query_one(Log).clear() # NOTE: broken for now, let's live without it
+            self.query_one(Log).clear()
             self.begin_capture_print(self, True, True)
             self.run_cmd(self.CMD)
             self.query_one(Log).focus()
