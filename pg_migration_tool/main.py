@@ -199,9 +199,7 @@ class SelectApp(App):
         return " ".join(environment + [command] + arguments)
 
     def generate_pg_dump_and_restore_cmd(self, event: Select.Changed)-> str:
-        jobs = self.query_one(Input).value or 16
         db = config["dbs"][event.value]
-        dump_path = self.construct_path_to_dump(db)
         pg_dump_cmd = self.construct_dump_command(db)
         pg_restore_cmd = self.construct_restore_command(db)
         finished_cmd = 'echo "THE MIGRATION HAS FINISHED!!! pg_restore exit code: $?"'
