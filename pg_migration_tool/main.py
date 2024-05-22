@@ -172,7 +172,7 @@ class SelectApp(App):
         environment = []
 
         if db['target']['db_password']:
-            environment.append(f"PGPASSWORD='{db['source']['db_password']}'")
+            environment.append(f"PGPASSWORD='{db['target']['db_password']}'")
 
         command = "pg_restore"
         arguments = [
