@@ -3,6 +3,7 @@ import base64
 import os
 import subprocess
 import threading
+from pathlib import Path
 
 import boto3
 import asyncpg
@@ -13,6 +14,7 @@ from textual.app import App, ComposeResult
 from textual.containers import Horizontal
 from textual.events import Print
 from textual.widgets import Button, Header, Log, Markdown, Select, Label, Input
+from textual.widgets import Checkbox
 
 root_dir = os.path.dirname(__file__)  # <-- absolute dir the script is in
 config_rel_path = "config.yaml"
@@ -28,6 +30,7 @@ with open(abs_config_file_path, "r") as file:
 class SelectApp(App):
     CSS_PATH = "select.tcss"
     CMD = ""
+    DUMP_PATH = ""
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -36,6 +39,10 @@ class SelectApp(App):
                          Button.success("Validate", id="validate", disabled=True),
                          Label("--jobs"),
                          Input(placeholder="16"))
+        yield Horizontal(
+            Checkbox(id="no_owner", label="Discard owner information in dump and restore all objects to be owned by the target user", value=True),
+            Checkbox(id="no_privileges", label="Discard privileges information in dump and don't try to restore it", value=True),
+        )
         yield Markdown(id="db_config_markdown", markdown="")
         yield Log(auto_scroll=True)
 
@@ -52,6 +59,7 @@ class SelectApp(App):
         if connections_ok:
             self.query_one("#migrate").disabled = False
             self.query_one("#validate").disabled = False
+            self.DUMP_PATH = self.construct_path_to_dump(config["dbs"][event.value])
             self.CMD = self.generate_pg_dump_and_restore_cmd(event)
 
     def clean_old_dumps(self, db):
@@ -125,13 +133,75 @@ class SelectApp(App):
         db_name = db["source"]["db_database_name"]
         return f"{path}/{db_name}"
 
-        
-    def generate_pg_dump_and_restore_cmd(self, event: Select.Changed)-> str:
+
+    def construct_dump_command(self, db) -> str:
         jobs = self.query_one(Input).value or 16
+
+        environment = []
+
+        if db['source']['db_password']:
+            environment.append(f"PGPASSWORD='{db['source']['db_password']}'")
+
+        command = "pg_dump"
+        arguments = [
+            f"-h {db['source']['db_connection_host']}",
+            f"-p {db['source'].get('port', 5432)}",
+            f"-U {db['source']['db_username']}",
+            f"-d {db['source']['db_database_name']}",
+            "-T '*awsdms*'",
+            "--create",
+            "--clean",
+            "--encoding utf8",
+            "--format directory",
+            f"--jobs {jobs}",
+            "-Z 0",
+            "-v",
+            f"--file={self.DUMP_PATH}",
+        ]
+
+        if self.query_one("#no_owner").value:
+            arguments.append("--no-owner")
+
+        if self.query_one("#no_privileges").value:
+            arguments.append("--no-privileges")
+
+        return " ".join(environment + [command] + arguments)
+
+
+    def construct_restore_command(self, db) -> str:
+        environment = []
+
+        if db['target']['db_password']:
+            environment.append(f"PGPASSWORD='{db['source']['db_password']}'")
+
+        command = "pg_restore"
+        arguments = [
+            f"-h {db['target']['db_connection_host']}",
+            f"-p {db['target'].get('port', 5432)}",
+            f"-U {db['target']['db_username']}",
+            f"-d {db['target']['db_database_name']}",
+            "--clean",
+            "--if-exists",
+            "--single-transaction",
+            "--exit-on-error",
+            "--format directory",
+            "-vv",
+        ]
+
+        if self.query_one("#no_owner").value:
+            arguments.append("--no-owner")
+
+        if self.query_one("#no_privileges").value:
+            arguments.append("--no-privileges")
+
+        arguments.append(self.DUMP_PATH)
+
+        return " ".join(environment + [command] + arguments)
+
+    def generate_pg_dump_and_restore_cmd(self, event: Select.Changed)-> str:
         db = config["dbs"][event.value]
-        dump_path = self.construct_path_to_dump(db)
-        pg_dump_cmd = f'PGPASSWORD=\'{db['source']['db_password']}\' pg_dump -T \'*awsdms*\' -h {db['source']['db_connection_host']} -p {db['source'].get('port', 5432)} -U {db['source']['db_username']} -d {db['source']['db_database_name']} --create --clean --encoding utf8 --format directory --jobs {jobs} -Z 0 -v --file={dump_path}'
-        pg_restore_cmd = f'PGPASSWORD=\'{db['target']['db_password']}\' pg_restore -h {db['target']['db_connection_host']} -p {db['target'].get('port', 5432)} -U {db['target']['db_username']} -d {db['target']['db_database_name']} --clean --if-exists --single-transaction --exit-on-error --format directory -vv {dump_path}'
+        pg_dump_cmd = self.construct_dump_command(db)
+        pg_restore_cmd = self.construct_restore_command(db)
         finished_cmd = 'echo "THE MIGRATION HAS FINISHED!!! pg_restore exit code: $?"'
 
         cmd = " && /\n ".join([pg_dump_cmd, pg_restore_cmd])
@@ -148,6 +218,7 @@ class SelectApp(App):
             self.query_one(Select).disabled = True
             self.begin_capture_print(self, True, True)
             self.run_cmd(self.CMD)
+            self.query_one(Log).focus()
         elif event.button.id == "validate":
             event.button.disabled = True
             asyncio.create_task(self.validate_migration())
@@ -220,7 +291,8 @@ class SelectApp(App):
         self.query_one(Log).write_line(event.text)
 
         # Save event.text to file
-        with open("log.log", "a") as file:
+        Path(self.DUMP_PATH).mkdir(parents=True, exist_ok=True)
+        with open(f"{self.DUMP_PATH}/migration.log", "a") as file:
             file.write(event.text)
 
 
