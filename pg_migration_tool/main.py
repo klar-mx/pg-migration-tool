@@ -154,7 +154,7 @@ class SelectApp(App):
             f"--jobs {jobs}",
             "-Z 0",
             "-v",
-            f"--file={dump_path}"
+            f"--file={dump_path}",
         ]
 
         if self.query_one("#no_owner").value:
