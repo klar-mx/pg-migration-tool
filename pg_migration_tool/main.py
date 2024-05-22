@@ -138,7 +138,7 @@ class SelectApp(App):
         environment = []
 
         if db['source']['db_password']:
-            environment.append(f"PASSWORD='${db['source']['db_password']}'")
+            environment.append(f"PASSWORD='{db['source']['db_password']}'")
 
         command = "pg_dump"
         arguments = [
@@ -172,7 +172,7 @@ class SelectApp(App):
         environment = []
 
         if db['target']['db_password']:
-            environment.append(f"PASSWORD='${db['target']['db_password']}'")
+            environment.append(f"PASSWORD='{db['target']['db_password']}'")
 
         command = "pg_restore"
         arguments = [
@@ -218,6 +218,7 @@ class SelectApp(App):
             self.query_one(Select).disabled = True
             self.begin_capture_print(self, True, True)
             self.run_cmd(self.CMD)
+            self.query_one(Log).focus()
         elif event.button.id == "validate":
             event.button.disabled = True
             asyncio.create_task(self.validate_migration())
