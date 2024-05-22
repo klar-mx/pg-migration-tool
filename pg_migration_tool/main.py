@@ -176,10 +176,10 @@ class SelectApp(App):
 
         command = "pg_restore"
         arguments = [
-            f"-h {db['source']['db_connection_host']}",
-            f"-p {db['source'].get('port', 5432)}",
-            f"-U {db['source']['db_username']}",
-            f"-d {db['source']['db_database_name']}",
+            f"-h {db['target']['db_connection_host']}",
+            f"-p {db['target'].get('port', 5432)}",
+            f"-U {db['target']['db_username']}",
+            f"-d {db['target']['db_database_name']}",
             "--clean",
             "--if-exists",
             "--single-transaction",
