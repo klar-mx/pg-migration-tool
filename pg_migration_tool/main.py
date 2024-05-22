@@ -3,6 +3,7 @@ import base64
 import os
 import subprocess
 import threading
+from pathlib import Path
 
 import boto3
 import asyncpg
@@ -58,8 +59,8 @@ class SelectApp(App):
         if connections_ok:
             self.query_one("#migrate").disabled = False
             self.query_one("#validate").disabled = False
-            self.CMD = self.generate_pg_dump_and_restore_cmd(event)
             self.DUMP_PATH = self.construct_path_to_dump(config["dbs"][event.value])
+            self.CMD = self.generate_pg_dump_and_restore_cmd(event)
 
     def clean_old_dumps(self, db):
         self.query_one(Log).clear()
@@ -168,8 +169,6 @@ class SelectApp(App):
 
 
     def construct_restore_command(self, db) -> str:
-        dump_path = self.construct_path_to_dump(db)
-
         environment = []
 
         if db['target']['db_password']:
@@ -195,7 +194,7 @@ class SelectApp(App):
         if self.query_one("#no_privileges").value:
             arguments.append("--no-privileges")
 
-        arguments.append(dump_path)
+        arguments.append(self.DUMP_PATH)
 
         return " ".join(environment + [command] + arguments)
 
@@ -292,6 +291,7 @@ class SelectApp(App):
         self.query_one(Log).write_line(event.text)
 
         # Save event.text to file
+        Path(self.DUMP_PATH).mkdir(parents=True, exist_ok=True)
         with open(f"{self.DUMP_PATH}/migration.log", "a") as file:
             file.write(event.text)
 
