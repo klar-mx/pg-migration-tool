@@ -29,6 +29,7 @@ with open(abs_config_file_path, "r") as file:
 class SelectApp(App):
     CSS_PATH = "select.tcss"
     CMD = ""
+    DUMP_PATH = ""
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -58,6 +59,7 @@ class SelectApp(App):
             self.query_one("#migrate").disabled = False
             self.query_one("#validate").disabled = False
             self.CMD = self.generate_pg_dump_and_restore_cmd(event)
+            self.DUMP_PATH = self.construct_path_to_dump(config["dbs"][event.value])
 
     def clean_old_dumps(self, db):
         self.query_one(Log).clear()
@@ -132,7 +134,6 @@ class SelectApp(App):
 
 
     def construct_dump_command(self, db) -> str:
-        dump_path = self.construct_path_to_dump(db)
         jobs = self.query_one(Input).value or 16
 
         environment = []
@@ -154,7 +155,7 @@ class SelectApp(App):
             f"--jobs {jobs}",
             "-Z 0",
             "-v",
-            f"--file={dump_path}",
+            f"--file={self.DUMP_PATH}",
         ]
 
         if self.query_one("#no_owner").value:
@@ -291,7 +292,7 @@ class SelectApp(App):
         self.query_one(Log).write_line(event.text)
 
         # Save event.text to file
-        with open("log.log", "a") as file:
+        with open(f"{self.DUMP_PATH}/migration.log", "a") as file:
             file.write(event.text)
 
 
