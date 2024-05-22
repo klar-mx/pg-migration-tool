@@ -214,7 +214,8 @@ class SelectApp(App):
     @on(Button.Pressed)
     def button_pressed(self, event: Button.Pressed):
         if event.button.id == "migrate":
-            self.query_one(Log).clear()
+            event.button.disabled = True
+            self.query_one(Select).disabled = True
             self.begin_capture_print(self, True, True)
             self.run_cmd(self.CMD)
             self.query_one(Log).focus()
@@ -279,8 +280,6 @@ class SelectApp(App):
 
             await source_conn.close()
             await target_conn.close()
-
-            self.query_one("validate").disabled = False
 
 
     @on(Print)
