@@ -35,13 +35,14 @@ class SelectApp(App):
     def compose(self) -> ComposeResult:
         yield Header()
         yield Horizontal(Select(((line, line) for line in LINES), prompt="Select database"), 
-                         Button.success("Migrate", id="migrate", disabled=True),
-                         Button.success("Validate", id="validate", disabled=True),
-                         Label("--jobs"),
-                         Input(placeholder="16"))
+                        Button.success("Migrate", id="migrate", disabled=True),
+                        Button.success("Validate", id="validate", disabled=True),
+                        Label("--jobs"),
+                        Input(placeholder="16"))
         yield Horizontal(
             Checkbox(id="no_owner", label="Discard owner information in dump and restore all objects to be owned by the target user", value=True),
             Checkbox(id="no_privileges", label="Discard privileges information in dump and don't try to restore it", value=True),
+            Checkbox(id="migrate_from_local", label="Migrate from local files", value=False),
         )
         yield Markdown(id="db_config_markdown", markdown="")
         yield Log(auto_scroll=True)
@@ -217,7 +218,19 @@ class SelectApp(App):
             event.button.disabled = True
             self.query_one(Select).disabled = True
             self.begin_capture_print(self, True, True)
-            self.run_cmd(self.CMD)
+            
+            if self.query_one("#migrate_from_local").value:
+                local_dump_exists = Path(self.DUMP_PATH).exists()
+                if local_dump_exists:
+                    self.query_one(Log).write_line("Local dump found, skipping dump from source database.")
+                    restore_cmd = self.construct_restore_command(config["dbs"][self.title])
+                    self.run_cmd(restore_cmd)
+                else:
+                    self.query_one(Log).write_line("Local dump not found, proceeding with dump from source database.")
+                    self.run_cmd(self.CMD)
+            else:
+                self.run_cmd(self.CMD)
+            
             self.query_one(Log).focus()
         elif event.button.id == "validate":
             event.button.disabled = True
