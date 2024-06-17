@@ -60,7 +60,7 @@ class SelectApp(App):
             self.query_one("#migrate").disabled = False
             self.query_one("#validate").disabled = False
             self.DUMP_PATH = self.construct_path_to_dump(config["dbs"][event.value])
-            self.CMD = self.generate_pg_dump_and_restore_cmd(event)
+            self.CMD = self.generate_cmd(event)
 
     def clean_old_dumps(self, db):
         self.query_one(Log).clear()
@@ -198,7 +198,7 @@ class SelectApp(App):
 
         return " ".join(environment + [command] + arguments)
 
-    def generate_pg_dump_and_restore_cmd(self, event: Select.Changed)-> str:
+    def generate_cmd(self, event: Select.Changed)-> str:
         db = config["dbs"][event.value]
         pg_dump_cmd = self.construct_dump_command(db)
         pg_restore_cmd = self.construct_restore_command(db)
