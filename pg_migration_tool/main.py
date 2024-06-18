@@ -27,6 +27,14 @@ with open(abs_config_file_path, "r") as file:
     LINES.sort()
 
 
+def join_arguments(it):
+    return " \\\n  ".join(it)
+
+
+def join_commands(it):
+    return " && \\\n".join(it)
+
+
 class SelectApp(App):
     CSS_PATH = "select.tcss"
     CMD = ""
@@ -34,24 +42,35 @@ class SelectApp(App):
 
     def compose(self) -> ComposeResult:
         yield Header()
-        yield Horizontal(Select(((line, line) for line in LINES), prompt="Select database"), 
+        yield Horizontal(Select(((line, line) for line in LINES), id="select", prompt="Select database"),
                          Button.success("Migrate", id="migrate", disabled=True),
                          Button.success("Validate", id="validate", disabled=True),
                          Label("--jobs"),
-                         Input(placeholder="16"))
+                         Input(placeholder="16", id="jobs"))
+        yield Horizontal(
+            Checkbox(id="reuse_dump", label="Reuse existing dump from previous runs", value=False),
+            Checkbox(id="time_execution", label="Use `time` to record execution time of dump/restore", value=True),
+        )
         yield Horizontal(
             Checkbox(id="no_owner", label="Discard owner information in dump and restore all objects to be owned by the target user", value=True),
             Checkbox(id="no_privileges", label="Discard privileges information in dump and don't try to restore it", value=True),
         )
         yield Markdown(id="db_config_markdown", markdown="")
-        yield Log(auto_scroll=True)
+        yield Log(id="log", auto_scroll=True)
 
-    @on(Select.Changed)
+    @on(Checkbox.Changed, "#reuse_dump,#no_owner,#no_privileges,#time_execution,#jobs")
+    async def regen_cmd(self, event: Checkbox.Changed) -> None:
+        select = self.query_one("#select")
+        if select.value == Select.BLANK: return
+
+        self.CMD = self.generate_cmd(select)
+
+    @on(Select.Changed, "#select")
     async def select_changed(self, event: Select.Changed) -> None:
-        if event.value == "Select database": return
+        if event.value == Select.BLANK: return
+
         self.title = str(event.value)
-        self.clean_old_dumps(config["dbs"][event.value])
-        
+
         self.display_db_config(config["dbs"][event.value])
         connections_ok = await self.check_db_connection(event)
         self.display_db_config(config["dbs"][event.value])
@@ -61,11 +80,6 @@ class SelectApp(App):
             self.query_one("#validate").disabled = False
             self.DUMP_PATH = self.construct_path_to_dump(config["dbs"][event.value])
             self.CMD = self.generate_cmd(event)
-
-    def clean_old_dumps(self, db):
-        self.query_one(Log).clear()
-        dump_path = self.construct_path_to_dump(db)
-        os.system(f"rm -rf {dump_path}")
 
     def display_db_config(self, db):
 
@@ -126,7 +140,7 @@ class SelectApp(App):
             return decrypted_password
         except Exception as e:
             self.query_one(Log).write_line(f'{label} Failed to decrypt password with kms key \'{config["common"]["kms_key_id"]}\': {e}')
-            return None
+        return None
 
     def construct_path_to_dump(self, db) -> str:
         path = config["common"]["dumps_working_directory"]
@@ -165,7 +179,11 @@ class SelectApp(App):
         if self.query_one("#no_privileges").value:
             arguments.append("--no-privileges")
 
-        return " ".join(environment + [command] + arguments)
+        command = [command]
+        if self.query_one("#time_execution").value:
+            command.insert(0, "time")
+
+        return join_arguments(environment + command + arguments)
 
 
     def construct_restore_command(self, db) -> str:
@@ -196,15 +214,28 @@ class SelectApp(App):
 
         arguments.append(self.DUMP_PATH)
 
-        return " ".join(environment + [command] + arguments)
+        command = [command]
+        if self.query_one("#time_execution").value:
+            command.insert(0, "time")
+
+        return join_arguments(environment + command + arguments)
 
     def generate_cmd(self, event: Select.Changed)-> str:
         db = config["dbs"][event.value]
-        pg_dump_cmd = self.construct_dump_command(db)
-        pg_restore_cmd = self.construct_restore_command(db)
+        commands = []
+
+        # only run the dump command in we're not reusing existing dump
+        if not self.query_one("#reuse_dump").value:
+            dump_path = self.construct_path_to_dump(db)
+            commands.append(f"rm -rf {dump_path}")
+
+            commands.append(self.construct_dump_command(db))
+
+        commands.append(self.construct_restore_command(db))
+
         finished_cmd = 'echo "THE MIGRATION HAS FINISHED!!! pg_restore exit code: $?"'
 
-        cmd = " && /\n ".join([pg_dump_cmd, pg_restore_cmd])
+        cmd = join_commands(commands)
         cmd += " ; " + finished_cmd
         self.query_one(Log).write_line("The following migration commands will be executed:\n" + cmd)
 
@@ -217,8 +248,8 @@ class SelectApp(App):
             event.button.disabled = True
             self.query_one(Select).disabled = True
             self.begin_capture_print(self, True, True)
-            self.run_cmd(self.CMD)
             self.query_one(Log).focus()
+            self.run_cmd(self.CMD)
         elif event.button.id == "validate":
             event.button.disabled = True
             asyncio.create_task(self.validate_migration())
