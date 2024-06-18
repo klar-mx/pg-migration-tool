@@ -140,7 +140,7 @@ class SelectApp(App):
             return decrypted_password
         except Exception as e:
             self.query_one(Log).write_line(f'{label} Failed to decrypt password with kms key \'{config["common"]["kms_key_id"]}\': {e}')
-        return None
+            return None
 
     def construct_path_to_dump(self, db) -> str:
         path = config["common"]["dumps_working_directory"]
