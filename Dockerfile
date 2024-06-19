@@ -1,7 +1,7 @@
 FROM python:3.12-slim
 
 RUN apt-get update && apt-get -y upgrade
-RUN apt-get install -y libpq-dev gcc xterm wget postgresql-client postgresql-client-common
+RUN apt-get install -y libpq-dev gcc xterm wget postgresql-client postgresql-client-common time
 
 # Don't run as root
 RUN useradd -m pgmigrator && \
