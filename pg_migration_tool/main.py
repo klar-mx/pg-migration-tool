@@ -200,9 +200,9 @@ class SelectApp(App):
             f"-d {db['target']['db_database_name']}",
             "--clean",
             "--if-exists",
-            "--single-transaction",
             "--exit-on-error",
             "--format directory",
+            f"--jobs {jobs}",
             "-vv",
         ]
 
