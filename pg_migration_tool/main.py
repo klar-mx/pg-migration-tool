@@ -20,6 +20,7 @@ root_dir = os.path.dirname(__file__)  # <-- absolute dir the script is in
 config_rel_path = "config.yaml"
 abs_config_file_path = os.getenv("PG_MIGRATION_TOOL_CONFIG", os.path.join(root_dir, config_rel_path))
 client = boto3.client('kms', region_name='us-east-2')
+cpu_scale_factor = 2 # by how much multiply real cpu count for jobs parameter
 
 with open(abs_config_file_path, "r") as file:
     config = yaml.safe_load(file)
@@ -34,6 +35,10 @@ def join_arguments(it):
 def join_commands(it):
     return " && \\\n".join(it)
 
+def get_proc_number():
+    result = subprocess.run(["nproc", "--all"], stdout=subprocess.PIPE)
+    return int(result.stdout.decode('utf-8').strip()) * cpu_scale_factor
+
 
 class SelectApp(App):
     CSS_PATH = "select.tcss"
@@ -46,7 +51,8 @@ class SelectApp(App):
                          Button.success("Migrate", id="migrate", disabled=True),
                          Button.success("Validate", id="validate", disabled=True),
                          Label("--jobs"),
-                         Input(placeholder="16", id="jobs"))
+                         Input(id="jobs", value=str(get_proc_number()))
+        )
         yield Horizontal(
             Checkbox(id="reuse_dump", label="Reuse existing dump from previous runs", value=False),
             Checkbox(id="time_execution", label="Use `time` to record execution time of dump/restore", value=True),
@@ -149,8 +155,7 @@ class SelectApp(App):
 
 
     def construct_dump_command(self, db) -> str:
-        jobs = self.query_one(Input).value or 16
-
+        jobs = self.query_one(Input).value
         environment = []
 
         if db['source']['db_password']:
@@ -187,6 +192,7 @@ class SelectApp(App):
 
 
     def construct_restore_command(self, db) -> str:
+        jobs = self.query_one(Input).value
         environment = []
 
         if db['target']['db_password']:
@@ -200,9 +206,9 @@ class SelectApp(App):
             f"-d {db['target']['db_database_name']}",
             "--clean",
             "--if-exists",
-            "--single-transaction",
             "--exit-on-error",
             "--format directory",
+            f"--jobs {jobs}",
             "-vv",
         ]
 
