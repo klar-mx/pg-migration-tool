@@ -279,45 +279,66 @@ class SelectApp(App):
         thread_err.start()
 
     async def validate_migration(self):
-            self.query_one(Log).write_line("Starting validation...")
+        self.query_one(Log).write_line("Starting validation...")
 
-            db = config["dbs"][self.title]
+        db = config["dbs"][self.title]
 
-            source_conn = await asyncpg.connect(
-                database=db["source"]["db_database_name"],
-                user=db["source"]["db_username"],
-                password=db["source"]["db_password"],
-                host=db["source"]["db_connection_host"],
-                port=db.get('port', 5432),
-            )
+        # Connect to source and target databases
+        source_conn = await asyncpg.connect(
+            database=db["source"]["db_database_name"],
+            user=db["source"]["db_username"],
+            password=db["source"]["db_password"],
+            host=db["source"]["db_connection_host"],
+            port=db.get('port', 5432),
+        )
 
-            target_conn = await asyncpg.connect(
-                database=db["target"]["db_database_name"],
-                user=db["target"]["db_username"],
-                password=db["target"]["db_password"],
-                host=db["target"]["db_connection_host"],
-                port=db.get('port', 5432),
-            )
+        target_conn = await asyncpg.connect(
+            database=db["target"]["db_database_name"],
+            user=db["target"]["db_username"],
+            password=db["target"]["db_password"],
+            host=db["target"]["db_connection_host"],
+            port=db.get('port', 5432),
+        )
 
-            source_tables = await source_conn.fetch("SELECT tablename FROM pg_tables WHERE schemaname='public' AND schemaname NOT LIKE 'awsdms_%';")
-            target_tables = await target_conn.fetch("SELECT tablename FROM pg_tables WHERE schemaname='public' AND schemaname NOT LIKE 'awsdms_%';")
+        # Get the list of tables in the source database
+        source_tables = await source_conn.fetch("SELECT tablename FROM pg_tables WHERE schemaname='public';")
+        source_table_names = {table['tablename'] for table in source_tables}
 
-            validation_results = "| Table | Source Rows | Target Rows | Match |\n"
-            validation_results += "| --- | --- | --- | --- |\n"
+        # Get the list of tables in the target database
+        target_tables = await target_conn.fetch("SELECT tablename FROM pg_tables WHERE schemaname='public';")
+        target_table_names = {table['tablename'] for table in target_tables}
 
-            for table in source_tables:
-                table_name = table["tablename"]
-                source_count = await source_conn.fetchval(f"SELECT COUNT(*) FROM {table_name};")
-                target_count = await target_conn.fetchval(f"SELECT COUNT(*) FROM {table_name};")
+        # Print the header for the validation results
+        validation_results = "| Table | Source Rows | Target Rows | Match |\n"
+        validation_results += "| --- | --- | --- | --- |\n"
 
-                match = "Yes" if source_count == target_count else "No"
-                validation_results += f"| {table_name} | {source_count} | {target_count} | {match} |\n"
+        # Validate each table
+        for table_name in source_table_names.union(target_table_names):
+            source_count = target_count = "N/A"
+            match = "No"
 
-            self.query_one(Markdown).update(validation_results)
+            if table_name in source_table_names:
+                try:
+                    source_count = await source_conn.fetchval(f"SELECT COUNT(*) FROM {table_name};")
+                except Exception as e:
+                    source_count = f"Error: {e}"
 
-            await source_conn.close()
-            await target_conn.close()
+            if table_name in target_table_names:
+                try:
+                    target_count = await target_conn.fetchval(f"SELECT COUNT(*) FROM {table_name};")
+                except Exception as e:
+                    target_count = f"Error: {e}"
 
+            if source_count == target_count:
+                match = "Yes"
+
+            validation_results += f"| {table_name} | {source_count} | {target_count} | {match} |\n"
+
+        self.query_one(Markdown).update(validation_results)
+
+        # Close connections
+        await source_conn.close()
+        await target_conn.close()
 
     @on(Print)
     def log_printed(self, event: Print):
